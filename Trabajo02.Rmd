@@ -1,0 +1,139 @@
+---
+title: "Tarea 2"
+output:
+  pdf_document: default
+  html_document: default
+  word_document: default
+date: "2025-10-17"
+---
+# Tarea 2: Problema de Decisión Multicriterio.
+**Francisco Espinar Domínguez.** 
+```{r, echo=FALSE}
+source("teoriadecision_funciones_multicriterio.R")
+source("teoriadecision_funciones_multicriterio_diagram.R")
+source("teoriadecision_funciones_multicriterio_utiles.R")
+```
+
+## Objetivo: Diseñar y resolver un problema de decisión multicriterio sobre la elección de sede para abrir una nueva oficina regional para una empresa de tecnología. 
+
+## Situación y alternativas:
+Una empresa de tecnología valora abrir cuatro posibles ciudades como sede regional. Las alternativas son:
+$$
+\begin{array}{ll}
+A_1: \text{Madrid.} & A_3: \text{Valencia.} \\
+A_2: \text{Barcelona.} & A_4: \text{Sevilla.} \\
+\end{array}
+$$
+
+## Jerarquía de criterios:
+Los criterios que se consideran para la elección de la sede son:
+
+\textbf{Criterios y subcriterios:}
+\begin{enumerate}
+  \item Economía (coste/beneficio)
+    \begin{enumerate}
+      \item Coste de local y alquiler (min)
+      \item Incentivos fiscales / subvenciones (max)
+    \end{enumerate}
+  \item Recursos Humanos
+    \begin{enumerate}
+      \item Disponibilidad de talento tecnológico (max)
+      \item Coste laboral medio (min)
+    \end{enumerate}
+  \item Infraestructura \& Conectividad
+    \begin{enumerate}
+      \item Conectividad internacional (aeropuertos, tren) (max)
+      \item Infraestructura de telecomunicaciones / fibra (max)
+    \end{enumerate}
+\end{enumerate}
+
+
+$$
+\begin{array}{lccccc}
+\hline
+\textbf{Subcriterio} & \textbf{Tipo} & \textbf{Madrid (A1)} & \textbf{Barcelona (A2)} & \textbf{Valencia (A3)} & \textbf{Sevilla (A4)} \\
+\hline
+\text{C1.1 Coste local (€/m²)} & \text{Min} & 30 & 32 & 18 & 15 \\
+\text{C1.2 Incentivos fiscales (0--10)} & \text{Max} & 6 & 5 & 7 & 8 \\
+\text{C2.1 Talento tecnológico (0--10)} & \text{Max} & 9 & 8 & 6 & 5 \\
+\text{C2.2 Coste laboral (€/mes)} & \text{Min} & 2600 & 2500 & 2000 & 1900 \\
+\text{C3.1 Conectividad internacional (0--10)} & \text{Max} & 10 & 9 & 7 & 6 \\
+\text{C3.2 Infraestructura telecom (0--10)} & \text{Max} & 9 & 9 & 8 & 7 \\
+\hline
+\end{array}
+$$
+
+## Paso 2: Asignar pesos a los criterios y subcriterios utilizando el método AHP.
+
+```{r}
+# Matriz de comparación por pares de criterios principales (3x3)
+Xmatriznivel1 <- matrix(c(
+  1, 3, 5,
+  1/3, 1, 3,
+  1/5, 1/3, 1
+), nrow=3, byrow=TRUE)
+
+rownames(Xmatriznivel1) <- colnames(Xmatriznivel1) <- c("Economía", "RRHH", "Infraestructura")
+
+# Matrices de comparación de subcriterios dentro de cada grupo
+Xmatriznivel2 <- array(NA, dim=c(2,2,3))
+
+# Economía (2 subcriterios)
+Xmatriznivel2[,,1] <- matrix(c(
+  1, 1/5,  # Coste vs Incentivos
+  5, 1
+), nrow=2, byrow=TRUE)
+
+rownames(Xmatriznivel2[,,1]) <- colnames(Xmatriznivel2[,,1]) <- c("Coste", "Incentivos")
+
+# RRHH (2 subcriterios)
+Xmatriznivel2[,,2] <- matrix(c(
+  1, 3,
+  1/3, 1
+), nrow=2, byrow=TRUE)
+
+rownames(Xmatriznivel2[,,2]) <- colnames(Xmatriznivel2[,,2]) <- c("Talento", "Coste laboral")
+
+# Infraestructura (2 subcriterios)
+Xmatriznivel2[,,3] <- matrix(c(
+  1, 2,
+  1/2, 1
+), nrow=2, byrow=TRUE)
+
+rownames(Xmatriznivel2[,,3]) <- colnames(Xmatriznivel2[,,3]) <- c("Conectividad", "Telecom")
+
+# Ejecutar el AHP completo
+resultadosAHP <- multicriterio.metodoAHP.variante3.completo(Xmatriznivel1, Xmatriznivel2)
+resultadosAHP
+```
+## Interpretación de la salida del método AHP:
+El criterio más importante es Economía (63.3%), seguido de Recursos Humanos (26.0%) y finalmente Infraestructura (10.6%). Esto refleja que la empresa prioriza los aspectos económicos (costes e incentivos) frente a los de personal o conectividad.
+
+Dentro de Economía, los incentivos fiscales dominan sobre el coste de alquiler.
+En Recursos Humanos, el talento tecnológico pesa tres veces más que el coste laboral.
+En Infraestructura, la conectividad internacional tiene más peso que las telecomunicaciones.
+
+Nivel 1 (criterios): 
+alfa = 3.0385, CI = 0.0193, RI = 0.03319922 => Consistencia aceptable. 
+
+Nivel 2 (subcriterios):
+Todas las matrices 2x2 tienen CI=0 => Perfectamente consistentes.
+
+Conclusión: Las matrices de comparación son coherentes, los juicios de preferencia no se contradicen.
+
+Con la tabla de los pesos puedo calcular los pesos globales de cada subcriterio, multiplicando los pesos de los subcriterios por los pesos del criterio padre:
+
+$$
+\begin{array}{llll}
+\textbf{Criterio principal} & \textbf{Subcriterio} & \textbf{Peso local} & \textbf{Peso global} \\
+\hline
+\text{Economía} & \text{Coste de local y alquiler} & 0.1667 & 0.1056 \\
+                & \text{Incentivos fiscales / subvenciones} & 0.8333 & 0.5278 \\
+\text{Recursos Humanos} & \text{Disponibilidad de talento tecnológico} & 0.75 & 0.1954 \\
+                        & \text{Coste laboral medio} & 0.25 & 0.0651 \\
+\text{Infraestructura \& Conectividad} & \text{Conectividad internacional} & 0.6667 & 0.0708 \\
+                                       & \text{Infraestructura de telecomunicaciones} & 0.3333 & 0.0354 \\
+\end{array}
+$$
+
+Los pesos suman aproximadamente 1, por lo que la ponderación jerárquica está bien hecha.
