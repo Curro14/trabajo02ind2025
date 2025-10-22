@@ -63,7 +63,7 @@ $$
 \end{array}
 $$
 
-## Paso 2: Asignar pesos a los criterios y subcriterios utilizando el método AHP.
+## Asignar pesos a los criterios y subcriterios utilizando el método AHP.
 
 ```{r}
 # Matriz de comparación por pares de criterios principales (3x3)
@@ -137,3 +137,184 @@ $$
 $$
 
 Los pesos suman aproximadamente 1, por lo que la ponderación jerárquica está bien hecha.
+
+## Genero el resultado y el diagrama de barras:
+
+```{r}
+# Matriz de Decisión (Alternativas en filas, Criterios en columnas)
+matriz_datos <- matrix(
+  c(30, 6, 9, 2600, 10, 9,
+    32, 5, 8, 2500, 9, 9,
+    18, 7, 6, 2000, 7, 8,
+    15, 8, 5, 1900, 6, 7),
+  nrow=4, byrow=TRUE)
+
+datos_alternativas <- as.data.frame(matriz_datos)
+colnames(datos_alternativas) <- c("C1.1", "C1.2", "C2.1", "C2.2", "C3.1", "C3.2")
+rownames(datos_alternativas) <- c("A1_Madrid", "A2_Barcelona", "A3_Valencia", "A4_Sevilla")
+
+# Preparar matriz para normalización AHP
+# Invertir criterios de Minimización (C1.1, C2.2) a Maximización: (Max - X)
+datos_ahp <- datos_alternativas
+datos_ahp$C1.1 <- max(datos_ahp$C1.1) - datos_ahp$C1.1
+datos_ahp$C2.2 <- max(datos_ahp$C2.2) - datos_ahp$C2.2
+
+# Normalización Nadir: (X - Min) / (Max - Min)
+matriz_normalizada <- multicriterio.homogeneizacion.nadir(datos_ahp)
+
+# Pesos Globales de AHP
+pesos_globales <- c(0.1056, 0.5278, 0.1954, 0.0651, 0.0708, 0.0354)
+
+# Puntuación AHP Final (SAW)
+puntuaciones_AHP <- as.matrix(matriz_normalizada) %*% pesos_globales
+
+# Generar Ranking AHP
+ranking_AHP <- data.frame(
+  Alternativa = rownames(datos_alternativas),
+  Puntuacion_AHP = as.numeric(puntuaciones_AHP),
+  Ranking_AHP = rank(-as.numeric(puntuaciones_AHP), ties.method = "min")
+)
+
+# Visualización del Ranking AHP
+library(ggplot2)
+ggplot(ranking_AHP, aes(x = reorder(Alternativa, Puntuacion_AHP), y = Puntuacion_AHP, fill = Alternativa)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = sprintf("%.4f", Puntuacion_AHP)), hjust = 1.2, color = "white") +
+  labs(title = "Ranking de Alternativas (AHP / SAW)",
+       x = "Alternativa",
+       y = "Puntuación Final Normalizada") +
+  theme_minimal() +
+  coord_flip()
+```
+
+## Aplicación del método ELECTRE:
+
+```{r}
+# Preparación para ELECTRE
+datos_electre <- datos_alternativas
+# Criterios de Minimización (C1.1, C2.2) se multiplican por -1 para ser MAXIMIZACIÓN
+datos_electre$C1.1 <- -datos_electre$C1.1
+datos_electre$C2.2 <- -datos_electre$C2.2
+pesos_electre <- pesos_globales
+
+# Ejecutar ELECTRE (se usan los umbrales medios por defecto)
+res_electre <- multicriterio.metodoelectre_varlibro(
+  Mvalor = as.matrix(datos_electre),
+  pesos.criterios = pesos_electre
+)
+
+print("--- Resultados ELECTRE (Umbrales Medios) ---")
+print(paste("Umbral Concordancia Medio:", res_electre$umbral.c.medio))
+print(paste("Umbral Discordancia Medio:", res_electre$umbral.d.medio))
+print("Matriz de Dominancia Agregada (1=Supera, 0=No Supera):")
+print(res_electre$Minddominancia_agregada)
+print("Núcleo (Alternativas no dominadas):")
+print(res_electre$nucleo_aprox)
+```
+
+### Conclusiones ELECTRE:
+
+Sevilla es la única alternativa que sobreclasifica a todas las demás y no es sobreclasificada por ninguna (es la que más veces tiene un '1' en su fila y más veces tiene un '0' en su columna, excluyendo la diagonal). Por lo tanto, Sevilla es la mejor opción según el método ELECTRE con umbrales medios.
+
+## Aplicación del método Promethee:
+```{r}
+# PROMETHEE utiliza los datos originales y la tabla de preferencias
+tab_fpref <- matrix(c(
+  3, 1, 10, 0,    # C1.1 Coste local (Min, V-shape)
+  3, 0.5, 2, 0,   # C1.2 Incentivos (Max, V-shape)
+  3, 0.5, 2, 0,   # C2.1 Talento (Max, V-shape)
+  3, 100, 300, 0, # C2.2 Coste laboral (Min, V-shape)
+  3, 0.5, 2, 0,   # C3.1 Conectividad (Max, V-shape)
+  3, 0.5, 1, 0    # C3.2 Telecom (Max, V-shape)
+), nrow=6, byrow=TRUE)
+
+fminmax <- c("min", "max", "max", "min", "max", "max")
+
+# Ejecutar PROMETHEE II (Flujos Medios Netos)
+res_promethee <- multicriterio.metodo.promethee_windows(
+  matdecision = as.matrix(datos_alternativas),
+  tab.fpref = tab_fpref,
+  pesos.criterios = pesos_globales,
+  fminmax = fminmax
+)
+
+print("--- Ranking PROMETHEE II (Flujos Medios Netos) ---")
+print(res_promethee$Acciones)
+```
+
+## Conclusiones PROMETHEE II:
+La alternativa con el mayor flujo neto es Sevilla, seguida de Valencia. Este ranking es idéntico al obtenido con el método AHP, confirmando que Sevilla es la mejor opción.
+
+# Análisis comparativo y conclusiones finales:
+## Tabla de comparación de rankings
+$$
+\begin{array}{|l|c|c|c|}
+    \hline
+    \textbf{Alternativa} & \begin{matrix} \textbf{Ranking} \\ \textbf{AHP} \end{matrix} & \begin{matrix} \textbf{Ranking} \\ \textbf{Electre I} \end{matrix} & \begin{matrix} \textbf{Ranking} \\ \textbf{Promethee II} \end{matrix} \\
+    \hline
+    A_4 \text{ (Sevilla)} & 1 & 1 & 1 \\
+    \hline
+    A_3 \text{ (Valencia)} & 2 & 2 & 2 \\
+    \hline
+    A_1 \text{ (Madrid)} & 3 & 3 & 3 \\
+    \hline
+    A_2 \text{ (Barcelona)} & 4 & 4 & 4 \\
+    \hline
+\end{array}
+$$
+
+**Consistencia de resultados:** Existe una convergencia total con los 3 métodos, todos coinciden en que Sevilla es la mejor opción, seguida de Valencia, Madrid y finalmente Barcelona. Esto refuerza la confianza en la decisión tomada.
+
+**Decisión final:** La alternativa óptima para la apertura de la nueva oficina regional es Sevilla.
+
+**Justificación:** 
+
+**Prioridad Empresarial:** El éxito de Sevilla se debe a la alta ponderación otorgada al criterio de Economía (63.3% del peso total), dentro del cual los Incentivos Fiscales y el Bajo Coste Laboral son muy fuertes.
+
+**Validación de Métodos:**
+
+AHP: Otorga la mayor puntuación a Sevilla por su alto rendimiento en los criterios más ponderados.
+
+ELECTRE: Confirma la elección al establecer a Sevilla como la única alternativa en el núcleo de la solución, lo que significa que ninguna otra alternativa la supera en los tests de concordancia y discordancia.
+
+PROMETHEE II: Sevilla presenta el mayor Flujo Neto positivo, indicando una preferencia saliente muy superior a la preferencia entrante.
+
+**Material gráfico:**
+```{r}
+# Código R para un Diagrama AHP de 3 Niveles (más representativo)
+
+# Cargar las librerías necesarias
+library(diagram)
+
+# Definir la matriz de la estructura (11 nodos: 1 Obj + 6 Subcri + 4 Alts)
+M_diagrama <- matrix(data=0, nrow=11, ncol=11, byrow=TRUE)
+
+# Nombres de los nodos
+nombres_nodos <- c(
+  "Objetivo",
+  "Coste/Alq", "Incentivos", "Talento", "CosteLab", "Conect", "Telecom",
+  "Madrid", "Barcelona", "Valencia", "Sevilla"
+)
+
+# Pesos Globales AHP (para el nivel Objetivo -> Subcriterios)
+pesos_globales <- c(0.1056, 0.5278, 0.1954, 0.0651, 0.0708, 0.0354)
+# M[fila, columna] = valor. Flechas de Objetivo (Col. 1) a Subcriterios (Filas 2-7)
+M_diagrama[2:7, 1] <- round(pesos_globales, 4)
+
+# Relación Subcriterios -> Alternativas (solo indicando la relación, con un valor pequeño)
+M_diagrama[8:11, 2:7] <- 0.01 # Flechas de Subcriterios (Cols. 2-7) a Alternativas (Filas 8-11)
+
+# Generar el diagrama
+png("ahp_diagram.png", width=1000, height=700)
+# 'pos' define cuántos nodos hay en cada nivel: 1 Obj, 6 Subcriterios, 4 Alternativas
+plotmat(M_diagrama, pos = c(1, 6, 4), name = nombres_nodos,
+        lwd = 1, box.lwd = 2,
+        curve = 0, cex.txt = 0.8, box.size = 0.08, box.type = "square",
+        box.prop = 0.35, main = "Estructura Jerárquica del Problema (AHP)",
+        arr.pos = 0.65, arr.lcol = c("darkgreen"), arr.col = c("darkgreen"),
+        segment.from = 0, segment.to = 1, arr.len=0.2,
+        box.cex = 1, arr.type="triangle", dtext=0.1, relsize=1,
+        box.col = c("lightblue", rep("lightgreen", 6), rep("orange", 4)))
+dev.off()
+```
+
